@@ -70,35 +70,35 @@ def parse_entry(entry):
     array = entry
     new_array = []
     for value in array:
-        for value_ in value:
-            new_array.append(str(value_))
+        new_array.extend(str(value_) for value_ in value)
     text_entry = new_array
 
-    entry = {}
-    entry["id"] = text_entry[0]
-    entry["title"] = text_entry[1]
-    entry["comments"] = text_entry[2]
-    entry["messages"] = text_entry[3]
-    entry["owner"] = text_entry[4]
-    entry["share_notifications"] = text_entry[5]
-    entry["open"] = text_entry[6]
+    entry = {
+        "id": text_entry[0],
+        "title": text_entry[1],
+        "comments": text_entry[2],
+        "messages": text_entry[3],
+        "owner": text_entry[4],
+        "share_notifications": text_entry[5],
+        "open": text_entry[6],
+    }
+
     return entry
 
 def parse_group_entry(entry):
     new_array = []
     for value in entry:
-        new_array_ = []
-        for value_ in value:
-            new_array_.append(str(value_))
-        entry = {}
-        entry["id"] = new_array_[0]
-        entry["title"] = new_array_[1]
-        entry["comments"] = new_array_[2]
-        entry["messages"] = new_array_[3]
-        entry["owner"] = new_array_[4]
-        entry["share_notifications"] = new_array_[5]
-        entry["open"] = new_array_[6]
-        
+        new_array_ = [str(value_) for value_ in value]
+        entry = {
+            "id": new_array_[0],
+            "title": new_array_[1],
+            "comments": new_array_[2],
+            "messages": new_array_[3],
+            "owner": new_array_[4],
+            "share_notifications": new_array_[5],
+            "open": new_array_[6],
+        }
+
         new_array.append(entry)
     return new_array
 
@@ -120,33 +120,30 @@ def board_text(board_data):
     comments = board_data["comments"]
     comments = literal_eval(comments)
 
-    if str(board_data["open"]) == "true":
-        if len(comments) > 0:
-            return placeholder(messages["board_with_comments"], None, board_data)
-        else:
-            return placeholder(messages["board_without_comments"], None, board_data)
-    else:
+    if str(board_data["open"]) != "true":
         return placeholder(messages["board_closed_comments"], None, board_data)
+    if len(comments) > 0:
+        return placeholder(messages["board_with_comments"], None, board_data)
+    else:
+        return placeholder(messages["board_without_comments"], None, board_data)
 
 def placeholder(text, handler, board_data):
     global version
 
-    replaces = []
-    replaces.append({"from": "{version}", "to": str(version)})
-
+    replaces = [{"from": "{version}", "to": str(version)}]
     if handler is not None:
-        if isinstance(handler, Message) or isinstance(handler, CallbackQuery):
+        if isinstance(handler, (Message, CallbackQuery)):
             name = handler.from_user.first_name
             if handler.from_user.last_name is not None:
-                name = name + " " + handler.from_user.last_name
+                name = f"{name} {handler.from_user.last_name}"
             replaces.append({"from": "{name}", "to": str(name)})
-            
+
             replaces.append({"from": "{user_id}", "to": str(handler.from_user.id)})
-            if isinstance(handler, Message):
-                replaces.append({"from": "{chat_id}", "to": str(handler.chat.id)})
-            if isinstance(handler, CallbackQuery):
-                replaces.append({"from": "{chat_id}", "to": str(handler.message.chat.id)})
-    
+        if isinstance(handler, Message):
+            replaces.append({"from": "{chat_id}", "to": str(handler.chat.id)})
+        if isinstance(handler, CallbackQuery):
+            replaces.append({"from": "{chat_id}", "to": str(handler.message.chat.id)})
+
     if board_data is not None:
         decoded_title = board_data["title"].replace("////+!!!+-,..-,.,,,,,,,OOf-..,,,!!+///", "'")
 
@@ -155,7 +152,7 @@ def placeholder(text, handler, board_data):
         replaces.append({"from": "{board_comments}", "to": str(board_comments(board_data))})
         replaces.append({"from": "{board_comments_amount}", "to": str(len(literal_eval(board_data["comments"])))})
         replaces.append({"from": "{board_messages_amount}", "to": str(len(literal_eval(board_data["messages"])))})
-    
+
     for replace in replaces:
         text = text.replace(str(replace["from"]), str(replace["to"]))
 
@@ -170,7 +167,14 @@ def create_board(new_board_data):
 
         print("Board created (" + str(new_board_data["id"]) + ",'" + str(title_encoded) + "','" + str(new_board_data["owner"]) + "')")
 
-        comparedentry = [a for a in cursor.execute("SELECT * FROM posts WHERE id='" + str(new_board_data["id"]) + "';")]
+        comparedentry = list(
+            cursor.execute(
+                "SELECT * FROM posts WHERE id='"
+                + str(new_board_data["id"])
+                + "';"
+            )
+        )
+
         return parse_entry(comparedentry)
     except Exception as ex:
         print("An error occurred while trying to create a board")
@@ -179,55 +183,109 @@ def create_board(new_board_data):
 ####################
 
 def return_editBoardKb(board_id):
-    return InlineKeyboardMarkup([InlineKeyboardButton("🔙 Back",callback_data="post_edit_" + str(board_id))])
+    return InlineKeyboardMarkup(
+        [
+            InlineKeyboardButton(
+                "🔙 Back", callback_data=f"post_edit_{str(board_id)}"
+            )
+        ]
+    )
 
 def editBoardKb(board_id):
-    comparedentry = [a for a in cursor.execute("SELECT * FROM posts WHERE id='" + str(board_id) + "';")]
+    comparedentry = list(
+        cursor.execute("SELECT * FROM posts WHERE id='" + str(board_id) + "';")
+    )
+
     board_data = parse_entry(comparedentry)
 
-    toggle_btn = InlineKeyboardButton("🔓 Open the board",callback_data="post_edit_" + str(board_id) + "_toggle")
+    toggle_btn = InlineKeyboardButton(
+        "🔓 Open the board", callback_data=f"post_edit_{str(board_id)}_toggle"
+    )
+
     if str(board_data["open"]).lower() == "true":
-        toggle_btn = InlineKeyboardButton("🔐 Close the board",callback_data="post_edit_" + str(board_id) + "_toggle")
+        toggle_btn = InlineKeyboardButton(
+            "🔐 Close the board",
+            callback_data=f"post_edit_{str(board_id)}_toggle",
+        )
 
-    share_notification_btn = InlineKeyboardButton("❌ Share notifications",callback_data="post_edit_" + str(board_id) + "_shareNotifications")
+
+    share_notification_btn = InlineKeyboardButton(
+        "❌ Share notifications",
+        callback_data=f"post_edit_{str(board_id)}_shareNotifications",
+    )
+
     if str(board_data["share_notifications"]).lower() == "true":
-        share_notification_btn = InlineKeyboardButton("✔️ Share notifications",callback_data="post_edit_" + str(board_id) + "_shareNotifications")
+        share_notification_btn = InlineKeyboardButton(
+            "✔️ Share notifications",
+            callback_data=f"post_edit_{str(board_id)}_shareNotifications",
+        )
 
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh",callback_data="post_edit_" + str(board_id) + "_refresh"),InlineKeyboardButton("🖇 Share",switch_inline_query=str(board_id))],[toggle_btn],[InlineKeyboardButton("✏️ Edit title", callback_data="post_edit_" + str(board_id) + "_title"),InlineKeyboardButton("🧹 Clear board",callback_data="post_edit_" + str(board_id) + "_clearComments")],[share_notification_btn],[InlineKeyboardButton("🗑 Delete the board",callback_data="post_delete_" + str(board_id))],[InlineKeyboardButton("🔙 Back to boards list",callback_data="post_mine")]])
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔄 Refresh",
+                    callback_data=f"post_edit_{str(board_id)}_refresh",
+                ),
+                InlineKeyboardButton(
+                    "🖇 Share", switch_inline_query=str(board_id)
+                ),
+            ],
+            [toggle_btn],
+            [
+                InlineKeyboardButton(
+                    "✏️ Edit title",
+                    callback_data=f"post_edit_{str(board_id)}_title",
+                ),
+                InlineKeyboardButton(
+                    "🧹 Clear board",
+                    callback_data=f"post_edit_{str(board_id)}_clearComments",
+                ),
+            ],
+            [share_notification_btn],
+            [
+                InlineKeyboardButton(
+                    "🗑 Delete the board",
+                    callback_data=f"post_delete_{str(board_id)}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 Back to boards list", callback_data="post_mine"
+                )
+            ],
+        ]
+    )
 
 def sA(array):
-    new_array = []
-    for value in array:
-        new_array.append(value[0])
-    return new_array
+    return [value[0] for value in array]
 
 async def send_edit_panel(message, board_id):
     user_id = str(message.from_user.id)
     if isinstance(message, Message):
         chat_id = str(message.chat.id)
-    mid = ""
-    if  isinstance(message, CallbackQuery):
-        mid = message.message.message_id
-
-    comparedentry = [a for a in cursor.execute("SELECT * FROM posts WHERE id='" + str(board_id) + "';")]
-    if len(comparedentry) > 0:
+    mid = message.message.message_id if isinstance(message, CallbackQuery) else ""
+    if comparedentry := list(
+        cursor.execute("SELECT * FROM posts WHERE id='" + str(board_id) + "';")
+    ):
         board_data = parse_entry(comparedentry)
         if  isinstance(message, CallbackQuery):
             await bot.edit_message_text(user_id, mid, placeholder(messages["board_panel"], message, board_data),parse_mode="HTML",reply_markup=editBoardKb(str(board_id)), disable_web_page_preview=True)
         else:
             await bot.send_message(chat_id, placeholder(messages["board_panel"], message, board_data),parse_mode="HTML",reply_markup=editBoardKb(str(board_id)), disable_web_page_preview=True)
+    elif isinstance(message, CallbackQuery):
+        await query.answer("Board not found")
     else:
-        if  isinstance(message, CallbackQuery):
-            await query.answer("Board not found")
-        else:
-            await bot.send_message(chat_id,"Board not found", disable_web_page_preview=True)
+        await bot.send_message(chat_id,"Board not found", disable_web_page_preview=True)
 
 async def refresh_board(board_id):
     board_id = str(board_id)
 
-    comparedentry = [a for a in cursor.execute("SELECT * FROM posts WHERE id='" + str(board_id) + "';")]
-    if len(comparedentry) > 0:
-        print("Refreshing the board: " + str(board_id))
+    if comparedentry := list(
+        cursor.execute("SELECT * FROM posts WHERE id='" + board_id + "';")
+    ):
+        print(f"Refreshing the board: {board_id}")
 
         try:
             board_data = parse_entry(comparedentry)
@@ -238,18 +296,23 @@ async def refresh_board(board_id):
                     await bot.edit_inline_text(str(message), board_text(board_data), reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Leave a comment",url="https://t.me/CommentsBoardBot?start=" + str(board_data["id"]))]]), disable_web_page_preview=True)
                 else:
                     await bot.edit_inline_text(str(message), board_text(board_data), disable_web_page_preview=True)
-            
-            print("Refreshed the board: " + str(board_id))
+
+            print(f"Refreshed the board: {board_id}")
         except Exception as ex:
-            print("An error occurred while trying to refresh the board '" + str(board_id) + "'")
+            print("An error occurred while trying to refresh the board '" + board_id + "'")
             print(ex)
     else:
-        print("An error occurred while trying to refresh the board:" + str(board_id))
+        print(f"An error occurred while trying to refresh the board:{board_id}")
         print("comparedentry with no results")
 
 def add_chat(chat):
     try:
-        user_in_table = [a for a in cursor.execute("SELECT chat_id FROM users WHERE chat_id='" + str(chat) + "';")]
+        user_in_table = list(
+            cursor.execute(
+                "SELECT chat_id FROM users WHERE chat_id='" + str(chat) + "';"
+            )
+        )
+
         if len(user_in_table) <= 0:
             cursor.execute("INSERT INTO users('chat_id') VALUES ('" + str(chat) + "');")
             database.commit()
